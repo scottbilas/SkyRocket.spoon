@@ -54,8 +54,9 @@ function SkyRocket:new(options)
   local resizer = {
     options = options,
     dragType = nil,
-    windowCanvas = nil,
     moveStartMouseEvent = buttonNameToEventType(options.moveMouseButton, 'moveMouseButton'),
+    previewCanvases = nil,
+    previewFrame = nil,
     resizeStartMouseEvent = buttonNameToEventType(options.resizeMouseButton, 'resizeMouseButton'),
     targetWindow = nil,
   }
@@ -94,8 +95,12 @@ end
 
 function SkyRocket:stop()
   self.dragType = nil
+  self.previewFrame = nil
 
-  self.windowCanvas:hide()
+  for _, previewCanvas in ipairs(self.previewCanvases or {}) do
+    previewCanvas.canvas:hide()
+  end
+  self.previewCanvases = nil
   self.cancelHandler:stop()
   self.dragHandler:stop()
   self.clickHandler:start()
@@ -155,49 +160,70 @@ function SkyRocket:handleDrag()
   return function(event)
     if not self.dragType then return nil end
 
-    local dx = event:getProperty(hs.eventtap.event.properties.mouseEventDeltaX)
-    local dy = event:getProperty(hs.eventtap.event.properties.mouseEventDeltaY)
-    local current = self.windowCanvas:topLeft()
-    local currentSize = self.windowCanvas:size()
-
+    -- Hammerspoon already reports mouse deltas in desktop points. Applying a
+    -- display scale again makes Retina drags move the preview at half speed.
     if self.dragType == dragTypes.move then
-      self.windowCanvas:topLeft({
-        x = current.x + dx,
-        y = current.y + dy,
-      })
-      return true
-    elseif self.dragType == dragTypes.resize_left then
-      self.windowCanvas:topLeft({ x = current.x + dx, y = current.y })
-      self.windowCanvas:size({ w = currentSize.w - dx, h = currentSize.h })
-      return true
-    elseif self.dragType == dragTypes.resize_right then
-      self.windowCanvas:size({ w = currentSize.w + dx, h = currentSize.h })
-      return true
-    elseif self.dragType == dragTypes.resize_top then
-      self.windowCanvas:topLeft({ x = current.x, y = current.y + dy })
-      self.windowCanvas:size({ w = currentSize.w, h = currentSize.h - dy })
-      return true
-    elseif self.dragType == dragTypes.resize_bottom then
-      self.windowCanvas:size({ w = currentSize.w, h = currentSize.h + dy })
-      return true
-    elseif self.dragType == dragTypes.resize_topleft then
-      self.windowCanvas:topLeft({ x = current.x + dx, y = current.y + dy })
-      self.windowCanvas:size({ w = currentSize.w - dx, h = currentSize.h - dy })
-      return true
-    elseif self.dragType == dragTypes.resize_topright then
-      self.windowCanvas:topLeft({ x = current.x, y = current.y + dy })
-      self.windowCanvas:size({ w = currentSize.w + dx, h = currentSize.h - dy })
-      return true
-    elseif self.dragType == dragTypes.resize_bottomleft then
-      self.windowCanvas:topLeft({ x = current.x + dx, y = current.y })
-      self.windowCanvas:size({ w = currentSize.w - dx, h = currentSize.h + dy })
-      return true
-    elseif self.dragType == dragTypes.resize_bottomright then
-      self.windowCanvas:size({ w = currentSize.w + dx, h = currentSize.h + dy })
-      return true
+      local dx = event:getProperty(hs.eventtap.event.properties.mouseEventDeltaX)
+      local dy = event:getProperty(hs.eventtap.event.properties.mouseEventDeltaY)
+      local currentFrame = self.previewFrame
+      local frame = {
+        x = currentFrame.x,
+        y = currentFrame.y,
+        w = currentFrame.w,
+        h = currentFrame.h,
+      }
+
+      frame.x = frame.x + dx
+      frame.y = frame.y + dy
+      self.previewFrame = frame
     else
-      return nil
+      -- Absolute mouse coordinates use a different vertical orientation from Canvas frames.
+      -- Resizing must therefore remain incremental, rather than using drag-start coordinates.
+      local dx = event:getProperty(hs.eventtap.event.properties.mouseEventDeltaX)
+      local dy = event:getProperty(hs.eventtap.event.properties.mouseEventDeltaY)
+      local currentFrame = self.previewFrame
+      local frame = {
+        x = currentFrame.x,
+        y = currentFrame.y,
+        w = currentFrame.w,
+        h = currentFrame.h,
+      }
+
+      if self.dragType == dragTypes.resize_left then
+        frame.x = frame.x + dx
+        frame.w = frame.w - dx
+      elseif self.dragType == dragTypes.resize_right then
+        frame.w = frame.w + dx
+      elseif self.dragType == dragTypes.resize_top then
+        frame.y = frame.y + dy
+        frame.h = frame.h - dy
+      elseif self.dragType == dragTypes.resize_bottom then
+        frame.h = frame.h + dy
+      elseif self.dragType == dragTypes.resize_topleft then
+        frame.x = frame.x + dx
+        frame.y = frame.y + dy
+        frame.w = frame.w - dx
+        frame.h = frame.h - dy
+      elseif self.dragType == dragTypes.resize_topright then
+        frame.y = frame.y + dy
+        frame.w = frame.w + dx
+        frame.h = frame.h - dy
+      elseif self.dragType == dragTypes.resize_bottomleft then
+        frame.x = frame.x + dx
+        frame.w = frame.w - dx
+        frame.h = frame.h + dy
+      elseif self.dragType == dragTypes.resize_bottomright then
+        frame.w = frame.w + dx
+        frame.h = frame.h + dy
+      else
+        return nil
+      end
+
+      self.previewFrame = frame
     end
+
+    self:updatePreviewCanvases()
+    return true
   end
 end
 
@@ -216,47 +242,39 @@ function SkyRocket:handleCancel()
 end
 
 function SkyRocket:resizeCanvasToWindow()
-  local position = self.targetWindow:topLeft()
-  local size = self.targetWindow:size()
+  local frame = self.targetWindow:frame()
+  self.previewFrame = { x = frame.x, y = frame.y, w = frame.w, h = frame.h }
+  self.previewCanvases = self:createResizeCanvases()
 
-  self.windowCanvas:topLeft({ x = position.x, y = position.y })
-  self.windowCanvas:size({ w = size.w, h = size.h })
+  self:updatePreviewCanvases()
 end
 
 function SkyRocket:resizeWindowToCanvas()
   if not self.targetWindow then return end
-  if not self.windowCanvas then return end
+  if not self.previewFrame then return end
 
-  local size = self.windowCanvas:size()
-  local pos = self.windowCanvas:topLeft()
-  -- For left/top/corners, move window as well as resize
-  if self.dragType == dragTypes.resize_left or self.dragType == dragTypes.resize_top or
-     self.dragType == dragTypes.resize_topleft or self.dragType == dragTypes.resize_topright or
-     self.dragType == dragTypes.resize_bottomleft then
-    self.targetWindow:move(hs.geometry.new({x = pos.x, y = pos.y, w = size.w, h = size.h}), nil, false, 0)
-  else
-    self.targetWindow:setSize(size.w, size.h)
-  end
+  self.targetWindow:move(hs.geometry.new(self.previewFrame), nil, false, 0)
 end
 
 function SkyRocket:moveWindowToCanvas()
   if not self.targetWindow then return end
-  if not self.windowCanvas then return end
+  if not self.previewFrame then return end
 
-  local frame = self.windowCanvas:frame()
-  local point = self.windowCanvas:topLeft()
-
-  local moveTo = {
-    x = point.x,
-    y = point.y,
-    w = frame.w,
-    h = frame.h,
-  }
-
-  self.targetWindow:move(hs.geometry.new(moveTo), nil, false, 0)
+  self.targetWindow:move(hs.geometry.new(self.previewFrame), nil, false, 0)
 end
 
-function SkyRocket:createResizeCanvas()
+local function intersectFrames(first, second)
+  local left = math.max(first.x, second.x)
+  local top = math.max(first.y, second.y)
+  local right = math.min(first.x + first.w, second.x + second.w)
+  local bottom = math.min(first.y + first.h, second.y + second.h)
+
+  if right <= left or bottom <= top then return nil end
+
+  return { x = left, y = top, w = right - left, h = bottom - top }
+end
+
+function SkyRocket:createResizeCanvases()
   local color
   if self.dragType == dragTypes.move then
     color = self.options.moveColor
@@ -265,18 +283,47 @@ function SkyRocket:createResizeCanvas()
   else
     color = self.options.resizeCornerColor
   end
-  local canvas = hs.canvas.new{}
-  canvas:insertElement(
-    {
-      id = 'opaque_layer',
-      action = 'fill',
-      type = 'rectangle',
-      fillColor = color,
-      roundedRectRadii = { xRadius = 5.0, yRadius = 5.0 },
-    },
-    1
-  )
-  return canvas
+  local canvases = {}
+
+  -- Keep each Canvas on its native display. Moving a Canvas window between
+  -- displays changes its backing scale and makes the preview jump or bounce.
+  for _, screen in ipairs(hs.screen.allScreens()) do
+    local screenFrame = screen:fullFrame()
+    local canvas = hs.canvas.new(screenFrame)
+    canvas:insertElement(
+      {
+        id = 'opaque_layer',
+        action = 'fill',
+        type = 'rectangle',
+        frame = { x = 0, y = 0, w = 0, h = 0 },
+        fillColor = color,
+        roundedRectRadii = { xRadius = 5.0, yRadius = 5.0 },
+      },
+      1
+    )
+    table.insert(canvases, { canvas = canvas, screenFrame = screenFrame })
+  end
+
+  return canvases
+end
+
+function SkyRocket:updatePreviewCanvases()
+  for _, previewCanvas in ipairs(self.previewCanvases) do
+    -- previewFrame is global; Canvas element frames are local to each display.
+    local intersection = intersectFrames(self.previewFrame, previewCanvas.screenFrame)
+    local frame = { x = 0, y = 0, w = 0, h = 0 }
+
+    if intersection then
+      frame = {
+        x = intersection.x - previewCanvas.screenFrame.x,
+        y = intersection.y - previewCanvas.screenFrame.y,
+        w = intersection.w,
+        h = intersection.h,
+      }
+    end
+
+    previewCanvas.canvas:elementAttribute(1, 'frame', frame)
+  end
 end
 
 local function matchesDisabledApp(window, disabledAppEntry)
@@ -295,7 +342,44 @@ local function matchesDisabledApp(window, disabledAppEntry)
   return false
 end
 
-local function getWindowUnderMouse(disabledApps)
+local function isPassthroughWindow(window, disabledApps)
+  for _, disabledAppEntry in pairs(disabledApps or {}) do
+    if matchesDisabledApp(window, disabledAppEntry) then
+      local action = type(disabledAppEntry) == "table" and disabledAppEntry.action or 'block'
+      if action == 'passthrough' then
+        return true
+      end
+    end
+  end
+  return false
+end
+
+-- Fast path: a single accessibility hit-test to find the topmost window under
+-- the mouse. This avoids hs.window.orderedWindows(), which enumerates every
+-- window of every running app and can take seconds when the system is under
+-- heavy load (Unity, Zoom, etc.). That enumeration runs synchronously inside
+-- the click event tap, so it is the main cause of the long delay before a drag
+-- begins.
+local function fastWindowUnderMouse()
+  local pos = hs.mouse.absolutePosition()
+  local element = hs.axuielement.systemWideElement():elementAtPosition(pos.x, pos.y)
+
+  -- The hit element may be a control deep inside the window; walk up to AXWindow.
+  local guard = 0
+  while element and guard < 25 do
+    if element:attributeValue("AXRole") == "AXWindow" then
+      return element:asHSWindow()
+    end
+    element = element:attributeValue("AXParent")
+    guard = guard + 1
+  end
+
+  return nil
+end
+
+-- Slow path: enumerate every window. Only needed when the topmost window is a
+-- 'passthrough' disabled app and we must find the window beneath it.
+local function slowWindowUnderMouse(disabledApps)
   -- Invoke `hs.application` because `hs.window.orderedWindows()` doesn't do it
   -- and breaks itself
   local _ = hs.application
@@ -306,25 +390,25 @@ local function getWindowUnderMouse(disabledApps)
   -- Find all windows under mouse, checking disabled apps with passthrough action
   for _, w in ipairs(hs.window.orderedWindows()) do
     if my_screen == w:screen() and my_pos:inside(w:frame()) then
-      -- Check if this window should be skipped (passthrough)
-      local shouldSkip = false
-      for _, disabledAppEntry in pairs(disabledApps or {}) do
-        if matchesDisabledApp(w, disabledAppEntry) then
-          local action = type(disabledAppEntry) == "table" and disabledAppEntry.action or 'block'
-          if action == 'passthrough' then
-            shouldSkip = true
-            break
-          end
-        end
-      end
-      
-      if not shouldSkip then
+      if not isPassthroughWindow(w, disabledApps) then
         return w
       end
     end
   end
-  
+
   return nil
+end
+
+local function getWindowUnderMouse(disabledApps)
+  local window = fastWindowUnderMouse()
+
+  -- Use the fast result unless it is a passthrough window, in which case we
+  -- fall back to the slower enumeration to find the window underneath it.
+  if window and not isPassthroughWindow(window, disabledApps) then
+    return window
+  end
+
+  return slowWindowUnderMouse(disabledApps)
 end
 
 function SkyRocket:handleClick()
@@ -373,11 +457,13 @@ function SkyRocket:handleClick()
       else
         self.dragType = getDragRegion(currentWindow, mousePos, self.options.regionRatio)
       end
-      self.windowCanvas = self:createResizeCanvas()
       self.targetWindow = currentWindow
 
       self:resizeCanvasToWindow()
-      self.windowCanvas:show()
+      self.dragStartMousePosition = mousePos
+      for _, previewCanvas in ipairs(self.previewCanvases) do
+        previewCanvas.canvas:show()
+      end
 
       self.cancelHandler:start()
       self.dragHandler:start()
