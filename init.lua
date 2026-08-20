@@ -3,17 +3,19 @@ local function scriptPath()
   return str:match("(.*/)")
 end
 
-local SkyRocket = {}
+local MoonRocket = {}
 
-SkyRocket.author = "David Balatero <d@balatero.com>"
-SkyRocket.homepage = "https://github.com/dbalatero/SkyRocket.spoon"
-SkyRocket.license = "MIT"
-SkyRocket.name = "SkyRocket"
-SkyRocket.version = "1.0.2"
-SkyRocket.spoonPath = scriptPath()
+MoonRocket.author = "Scott Bilas"
+MoonRocket.homepage = "https://github.com/scottbilas/MoonRocket"
+MoonRocket.license = "MIT"
+MoonRocket.name = "MoonRocket"
+MoonRocket.version = "2"
+MoonRocket.spoonPath = scriptPath()
+
+-- Derived from SkyRocket.spoon by David Balatero.
 
 -- Usage:
---   resizer = SkyRocket:new({
+--   resizer = MoonRocket:new({
 --     moveColor = { red = 0, green = 0, blue = 0, alpha = 0.3 },
 --     resizeEdgeColor = { red = 0.2, green = 0.4, blue = 0.8, alpha = 0.3 },
 --     resizeCornerColor = { red = 0.2, green = 0.7, blue = 0.5, alpha = 0.3 },
@@ -31,7 +33,7 @@ SkyRocket.spoonPath = scriptPath()
 --     },
 --   })
 --
-function SkyRocket:new(options)
+function MoonRocket:new(options)
   options = options or {}
   options.moveColor = options.moveColor or { red = 0, green = 0, blue = 0, alpha = 0.3 }
   options.resizeEdgeColor = options.resizeEdgeColor or { red = 0.2, green = 0.4, blue = 0.8, alpha = 0.3 }
@@ -93,7 +95,7 @@ function SkyRocket:new(options)
   return resizer
 end
 
-function SkyRocket:stop()
+function MoonRocket:stop()
   self.dragType = nil
   self.previewFrame = nil
 
@@ -148,15 +150,15 @@ local function getDragRegion(window, mousePos, regionRatio)
   return dragTypes.move -- fallback
 end
 
-function SkyRocket:isResizing()
+function MoonRocket:isResizing()
   return self.dragType ~= dragTypes.move
 end
 
-function SkyRocket:isMoving()
+function MoonRocket:isMoving()
   return self.dragType == dragTypes.move
 end
 
-function SkyRocket:handleDrag()
+function MoonRocket:handleDrag()
   return function(event)
     if not self.dragType then return nil end
 
@@ -227,7 +229,7 @@ function SkyRocket:handleDrag()
   end
 end
 
-function SkyRocket:handleCancel()
+function MoonRocket:handleCancel()
   return function()
     if not self.dragType then return end
 
@@ -241,7 +243,7 @@ function SkyRocket:handleCancel()
   end
 end
 
-function SkyRocket:resizeCanvasToWindow()
+function MoonRocket:resizeCanvasToWindow()
   local frame = self.targetWindow:frame()
   self.previewFrame = { x = frame.x, y = frame.y, w = frame.w, h = frame.h }
   self.previewCanvases = self:createResizeCanvases()
@@ -249,14 +251,14 @@ function SkyRocket:resizeCanvasToWindow()
   self:updatePreviewCanvases()
 end
 
-function SkyRocket:resizeWindowToCanvas()
+function MoonRocket:resizeWindowToCanvas()
   if not self.targetWindow then return end
   if not self.previewFrame then return end
 
   self.targetWindow:move(hs.geometry.new(self.previewFrame), nil, false, 0)
 end
 
-function SkyRocket:moveWindowToCanvas()
+function MoonRocket:moveWindowToCanvas()
   if not self.targetWindow then return end
   if not self.previewFrame then return end
 
@@ -274,7 +276,7 @@ local function intersectFrames(first, second)
   return { x = left, y = top, w = right - left, h = bottom - top }
 end
 
-function SkyRocket:createResizeCanvases()
+function MoonRocket:createResizeCanvases()
   local color
   if self.dragType == dragTypes.move then
     color = self.options.moveColor
@@ -307,7 +309,7 @@ function SkyRocket:createResizeCanvases()
   return canvases
 end
 
-function SkyRocket:updatePreviewCanvases()
+function MoonRocket:updatePreviewCanvases()
   for _, previewCanvas in ipairs(self.previewCanvases) do
     -- previewFrame is global; Canvas element frames are local to each display.
     local intersection = intersectFrames(self.previewFrame, previewCanvas.screenFrame)
@@ -411,7 +413,7 @@ local function getWindowUnderMouse(disabledApps)
   return slowWindowUnderMouse(disabledApps)
 end
 
-function SkyRocket:handleClick()
+function MoonRocket:handleClick()
   return function(event)
     if self.dragType then return true end
 
@@ -479,4 +481,4 @@ function SkyRocket:handleClick()
   end
 end
 
-return SkyRocket
+return MoonRocket

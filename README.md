@@ -1,36 +1,33 @@
-# 🌄 🚀 SkyRocket.spoon
+# MoonRocket.spoon
 
 This Hammerspoon tool lets you **resize** and **move** windows by clicking + dragging them while holding down modifier keys.
 
-This attempts to emulate such things as:
+MoonRocket is maintained by Scott Bilas. It retains the MIT license.
+
+## Attribution
+
+MoonRocket is derived from [SkyRocket.spoon](https://github.com/dbalatero/SkyRocket.spoon) by David Balatero. Its original implementation provided the foundation for this Spoon.
+
+## Inspiration
 
 * BetterTouchTool resize/move functions
 * Coderage Software's abandoned Zooom/2 software
 * Linux desktop move/resize hot keys
 
-I created this to fill the void after Zooom/2 was abandoned by the original developer.
-
-<img alt="SkyRocket move and resize demo" src="https://github.com/dbalatero/SkyRocket.spoon/raw/master/doc/demo.gif" />
-
 ## Installation
 
 This tool requires [Hammerspoon](https://www.hammerspoon.org/) to be installed and running.
 
-The easiest thing to do is paste this in:
-
-```
-mkdir -p ~/.hammerspoon/Spoons
-git clone https://github.com/dbalatero/SkyRocket.spoon.git ~/.hammerspoon/Spoons/SkyRocket.spoon
-```
+Place `MoonRocket.spoon` in `~/.hammerspoon/Spoons/`.
 
 ## Usage
 
 Once you've installed it, add this to your `~/.hammerspoon/init.lua` file:
 
 ```lua
-local SkyRocket = hs.loadSpoon("SkyRocket")
+local MoonRocket = hs.loadSpoon("MoonRocket")
 
-sky = SkyRocket:new({
+moon = MoonRocket:new({
   -- Opacity of resize canvas
   opacity = 0.3,
 
@@ -64,7 +61,7 @@ To resize a window, hold your `resizeModifiers` down, then click `resizeMouseBut
 You can disable move/resize for any app by adding it to the `disabledApps` option:
 
 ```lua
-sky = SkyRocket:new({
+moon = MoonRocket:new({
   -- For example, if you run your terminal in full-screen mode you might not
   -- to accidentally resize it:
   disabledApps = {"Alacritty"},
